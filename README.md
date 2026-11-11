@@ -142,12 +142,36 @@ TELEGRAM_CHAT_ID=123456789
 `dashboard.py` 打开后可以给每条需求点 👍 / 👎，写入 `feedback` 表。
 某个来源累计 5 票以上时：好评率 ≥70% → 下一轮该来源分数 ×1.15；≤30% → ×0.85。
 
-## 定时运行
+## 全自动每日运行
+
+系统安装了一个 macOS `launchd` 任务，**每天北京时间 01:00** 自动跑完整流程并把日报写到 `out/`：
 
 ```bash
-crontab -e
-0 9 * * * cd /Users/apple/Desktop/code/需求挖掘系统 && .venv/bin/python main.py >> data/run.log 2>&1
+# 安装 / 重装（重复执行安全）
+./install_daily_task.sh
+
+# 立即测试一次（dry-run，不调用 LLM、不写数据库）
+./run_daily.sh --dry-run
+
+# 查看任务状态
+launchctl print gui/$(id -u)/com.demandminer.daily
+
+# 立即正式跑一轮（正常不需要）
+./run_daily.sh
+
+# 卸载
+launchctl bootout gui/$(id -u)/com.demandminer.daily
+rm ~/Library/LaunchAgents/com.demandminer.daily.plist
 ```
+
+说明：
+
+- 用 `launchd` 而不是 `cron`：Mac 在 01:00 处于休眠时，`cron` 会直接跳过，`launchd` 会在唤醒后补跑一次。
+- 需要用户已登录、机器已开机；合盖休眠也可以，只要别关机。
+- `run_daily.sh` 自带运行锁（避免与手动运行叠加）、失败 10 分钟后重试一次、日志自动保留 30 天。
+- 日志：`data/logs/YYYY-MM-DD.log`（launchd 自身的输出在 `launchd.out.log` / `launchd.err.log`）。
+- 失败告警：若配了 `FEISHU_WEBHOOK` 或 `TELEGRAM_BOT_TOKEN`，会推送失败信息；同时弹 macOS 通知。
+- 定时按系统时区计算，当前机器时区为 `Asia/Shanghai`；如果改到其他时区，需要相应调整 plist 里的 `Hour`。
 
 ## 已知限制
 
